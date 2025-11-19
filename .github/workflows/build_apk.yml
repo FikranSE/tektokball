@@ -20,10 +20,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      - name: Install Dependencies
-        run: npm ci
+      - name: Install jq (and update apt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Install Dependencies (with retry)
+        run: |
+          set -e
+          for i in 1 2 3; do
+            echo "npm ci attempt $i"
+            if npm ci; then
+              break
+            fi
+            echo "npm ci failed, retrying in 10s..."
+            sleep 10
+          done
 
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
@@ -35,7 +48,15 @@ jobs:
       - name: EAS Build Android (APK)
         id: eas-build
         run: |
-          eas build --platform android --profile preview --non-interactive --json > build.json
+          set -e
+          for i in 1 2 3; do
+            echo "EAS build attempt $i"
+            if eas build --platform android --profile preview --non-interactive --json > build.json; then
+              break
+            fi
+            echo "EAS build failed, retrying in 20s..."
+            sleep 20
+          done
           cat build.json
           URL=$(jq -r '.[0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // empty' build.json)
           if [ -z "$URL" ]; then echo "No artifact URL found" && cat build.json && exit 1; fi
@@ -43,7 +64,15 @@ jobs:
 
       - name: Download APK artifact
         run: |
-          curl -L "${{ steps.eas-build.outputs.artifact_url }}" -o app-preview.apk
+          set -e
+          for i in 1 2 3; do
+            echo "Download attempt $i"
+            if curl -L "${{ steps.eas-build.outputs.artifact_url }}" -o app-preview.apk; then
+              break
+            fi
+            echo "Download failed, retrying in 10s..."
+            sleep 10
+          done
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
