@@ -16,33 +16,38 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: '20'
-          distribution: 'adopt'
-          cache: gradle
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '23'
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Run NPM Install
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: EAS Build Android (APK)
+        id: eas-build
         run: |
-          npm install
+          eas build --platform android --profile preview --non-interactive --json > build.json
+          cat build.json
+          URL=$(jq -r '.[0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // empty' build.json)
+          if [ -z "$URL" ]; then echo "No artifact URL found" && cat build.json && exit 1; fi
+          echo "artifact_url=$URL" >> $GITHUB_OUTPUT
 
-      - name: Change wrapper permissions
-        run: chmod +x ./android/gradlew
-
-      - name: Build App
+      - name: Download APK artifact
         run: |
-          cd android
-          ./gradlew assembleRelease
+          curl -L "${{ steps.eas-build.outputs.artifact_url }}" -o app-preview.apk
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app
-          path: android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 3
+          name: app-preview
+          path: app-preview.apk
+          retention-days: 7
