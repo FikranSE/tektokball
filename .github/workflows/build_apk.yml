@@ -21,6 +21,16 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Check EXPO_TOKEN
+        id: check-token
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "EXPO_TOKEN is not set. Set it in GitHub: Settings -> Secrets and variables -> Actions -> New repository secret"
+            echo "has_token=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_token=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install jq (and update apt)
         run: |
           sudo apt-get update
@@ -40,6 +50,7 @@ jobs:
 
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
+        if: ${{ steps.check-token.outputs.has_token == 'true' }}
         with:
           expo-version: latest
           eas-version: latest
@@ -47,6 +58,7 @@ jobs:
 
       - name: EAS Build Android (APK)
         id: eas-build
+        if: ${{ steps.check-token.outputs.has_token == 'true' }}
         run: |
           set -e
           for i in 1 2 3; do
@@ -63,6 +75,7 @@ jobs:
           echo "artifact_url=$URL" >> $GITHUB_OUTPUT
 
       - name: Download APK artifact
+        if: ${{ steps.check-token.outputs.has_token == 'true' }}
         run: |
           set -e
           for i in 1 2 3; do
@@ -76,7 +89,17 @@ jobs:
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
+        if: ${{ steps.check-token.outputs.has_token == 'true' }}
         with:
           name: app-preview
           path: app-preview.apk
           retention-days: 7
+
+      - name: Missing EXPO_TOKEN - guidance
+        if: ${{ steps.check-token.outputs.has_token != 'true' }}
+        run: |
+          echo "EXPO_TOKEN is missing. To enable EAS builds in CI:"
+          echo "1) Generate an access token at https://expo.dev/accounts/[owner]/settings/access-tokens"
+          echo "2) Add it as repository secret named EXPO_TOKEN (Settings -> Secrets and variables -> Actions)"
+          echo "Note: Secrets are not available to workflows triggered from PRs from forks. Use push builds or pull_request_target with caution."
+          exit 1
