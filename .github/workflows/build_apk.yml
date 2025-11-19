@@ -1,105 +1,32 @@
-name: "Build Android App"
+name: Android Build
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v3
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+    - name: Setup Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
 
-      - name: Check EXPO_TOKEN
-        id: check-token
-        run: |
-          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
-            echo "EXPO_TOKEN is not set. Set it in GitHub: Settings -> Secrets and variables -> Actions -> New repository secret"
-            echo "has_token=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_token=true" >> $GITHUB_OUTPUT
-          fi
+    - name: Install dependencies
+      run: npm install --legacy-peer-deps
 
-      - name: Install jq (and update apt)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
+    - name: Make gradlew executable
+      run: chmod +x android/gradlew
 
-      - name: Install Dependencies (with retry)
-        run: |
-          set -e
-          for i in 1 2 3; do
-            echo "npm ci attempt $i"
-            if npm ci; then
-              break
-            fi
-            echo "npm ci failed, retrying in 10s..."
-            sleep 10
-          done
+    - name: Build APK
+      run: cd android && ./gradlew assembleRelease
 
-      - name: Setup Expo and EAS
-        uses: expo/expo-github-action@v8
-        if: ${{ steps.check-token.outputs.has_token == 'true' }}
-        with:
-          expo-version: latest
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - name: EAS Build Android (APK)
-        id: eas-build
-        if: ${{ steps.check-token.outputs.has_token == 'true' }}
-        run: |
-          set -e
-          for i in 1 2 3; do
-            echo "EAS build attempt $i"
-            if eas build --platform android --profile preview --non-interactive --json > build.json; then
-              break
-            fi
-            echo "EAS build failed, retrying in 20s..."
-            sleep 20
-          done
-          cat build.json
-          URL=$(jq -r '.[0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // empty' build.json)
-          if [ -z "$URL" ]; then echo "No artifact URL found" && cat build.json && exit 1; fi
-          echo "artifact_url=$URL" >> $GITHUB_OUTPUT
-
-      - name: Download APK artifact
-        if: ${{ steps.check-token.outputs.has_token == 'true' }}
-        run: |
-          set -e
-          for i in 1 2 3; do
-            echo "Download attempt $i"
-            if curl -L "${{ steps.eas-build.outputs.artifact_url }}" -o app-preview.apk; then
-              break
-            fi
-            echo "Download failed, retrying in 10s..."
-            sleep 10
-          done
-
-      - name: Upload APK to Artifacts
-        uses: actions/upload-artifact@v4
-        if: ${{ steps.check-token.outputs.has_token == 'true' }}
-        with:
-          name: app-preview
-          path: app-preview.apk
-          retention-days: 7
-
-      - name: Missing EXPO_TOKEN - guidance
-        if: ${{ steps.check-token.outputs.has_token != 'true' }}
-        run: |
-          echo "EXPO_TOKEN is missing. To enable EAS builds in CI:"
-          echo "1) Generate an access token at https://expo.dev/accounts/[owner]/settings/access-tokens"
-          echo "2) Add it as repository secret named EXPO_TOKEN (Settings -> Secrets and variables -> Actions)"
-          echo "Note: Secrets are not available to workflows triggered from PRs from forks. Use push builds or pull_request_target with caution."
-          exit 1
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: app-release
+        path: android/app/build/outputs/apk/release/*.apk
