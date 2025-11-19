@@ -43,7 +43,7 @@ jobs:
         with:
           expo-version: latest
           eas-version: latest
-          token: ${{ DtdPxnr9yT5fk3hNkUkLELeTkMy2q-Ks3LqcrYPo }}
+          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: EAS Build Android (APK)
         id: eas-build
