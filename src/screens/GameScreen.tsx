@@ -6,6 +6,7 @@ import ShopStrip from '../components/shop/ShopStrip';
 import UpgradePanel from '../components/UpgradePanel';
 import LevelCompletePopup from '../components/LevelCompletePopup';
 import useGameStore from '../store/gameStore';
+import SoundManager from '../utils/SoundManager';
 
 const GameScreen = () => {
   const { 
@@ -20,6 +21,14 @@ const GameScreen = () => {
     gameRunning,
     setGameRunning 
   } = useGameStore();
+
+  // Play background music on screen mount, stop on unmount
+  useEffect(() => {
+    SoundManager.playBackgroundMusic();
+    return () => {
+      SoundManager.stopBackgroundMusic();
+    };
+  }, []);
 
   // Check for level completion
   useEffect(() => {

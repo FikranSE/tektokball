@@ -6,6 +6,7 @@ class SoundManager {
   private dropSound: Audio.Sound | null = null;
   private bounceSound: Audio.Sound | null = null;
   private levelWinSound: Audio.Sound | null = null;
+  private bgMusic: Audio.Sound | null = null;
   private initialized = false;
 
   constructor() {
@@ -16,6 +17,14 @@ class SoundManager {
     console.log('SoundManager initializing...');
     
     try {
+      // Configure audio mode (allow music in silent mode on iOS)
+      await Audio.setAudioModeAsync({
+        staysActiveInBackground: false,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+      
       // Load drop sound
       console.log('Loading drop.mp3...');
       const { sound: dropSound } = await Audio.Sound.createAsync(
@@ -33,11 +42,19 @@ class SoundManager {
       const { sound: levelWinSound } = await Audio.Sound.createAsync(
         require('../../assets/game/level-win.mp3')
       );
+
+      // Load background music (looping)
+      console.log('Loading game-music.mp3...');
+      const { sound: bgMusic } = await Audio.Sound.createAsync(
+        require('../../assets/game/game-music.mp3'),
+        { isLooping: true, volume: 0.4 }
+      );
       
       this.dropSound = dropSound;
       this.dragSound = dropSound; // Use same sound for drag
       this.bounceSound = bounceSound;
       this.levelWinSound = levelWinSound;
+      this.bgMusic = bgMusic;
       
       console.log('All sounds loaded successfully');
       this.initialized = true;
@@ -112,6 +129,39 @@ class SoundManager {
     }
   }
 
+  async playBackgroundMusic() {
+    if (!this.initialized) return;
+    if (this.bgMusic) {
+      try {
+        const status = await this.bgMusic.getStatusAsync();
+        if (!status.isLoaded) return;
+        if (!status.isPlaying) {
+          await this.bgMusic.playAsync();
+          console.log('🎶 Background music started');
+        }
+      } catch (error) {
+        console.log('Error playing background music:', error);
+      }
+    } else {
+      console.log('Background music not loaded');
+    }
+  }
+
+  async stopBackgroundMusic() {
+    if (!this.initialized) return;
+    if (this.bgMusic) {
+      try {
+        const status = await this.bgMusic.getStatusAsync();
+        if (status.isLoaded && status.isPlaying) {
+          await this.bgMusic.stopAsync();
+          console.log('🎶 Background music stopped');
+        }
+      } catch (error) {
+        console.log('Error stopping background music:', error);
+      }
+    }
+  }
+
   // For React Native, we can use the built-in sound capabilities
   async playSystemSound(type: 'drag' | 'drop' | 'bounce' | 'levelWin') {
     try {
@@ -164,6 +214,9 @@ class SoundManager {
     }
     if (this.levelWinSound) {
       await this.levelWinSound.unloadAsync();
+    }
+    if (this.bgMusic) {
+      await this.bgMusic.unloadAsync();
     }
   }
 }
